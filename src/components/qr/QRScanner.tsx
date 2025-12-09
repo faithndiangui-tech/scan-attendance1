@@ -29,6 +29,9 @@ interface QRScannerProps {
 
 export function QRScanner({ onScan }: QRScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
+  const [cameras, setCameras] = useState<Array<{ id: string; label?: string }>>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
@@ -75,57 +78,69 @@ export function QRScanner({ onScan }: QRScannerProps) {
       scannerRef.current = scanner;
 
       // Get available cameras
-      const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          toast.error('No cameras found on this device');
-          setIsScanning(false);
-          return;
-        }
+      const cams = await Html5Qrcode.getCameras();
+      if (!cams || cams.length === 0) {
+        toast.error('No cameras found on this device');
+        setIsScanning(false);
+        return;
+      }
 
-        const cameraId = cameras[0].id;
+      const camList = cams.map(c => ({ id: c.id, label: c.label }));
+      setCameras(camList);
+      const initialCameraId = selectedCameraId || camList[0].id;
+      setSelectedCameraId(initialCameraId);
 
-      await scanner.start(
-        cameraId,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-        },
-        async (decodedText) => {
-          try {
-            setProcessing(true);
-            const data: QRData = JSON.parse(decodedText);
-            
-            // Validate QR data structure
-            if (!data.sessionId || !data.classId || !data.type || !data.token) {
-              setScanResult({ success: false, message: 'Invalid QR code format' });
-              return;
+      const startScanWithCamera = async (cameraId: string) => {
+        try {
+          await scanner.start(
+            cameraId,
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
+              aspectRatio: 1.0,
+            },
+            async (decodedText) => {
+              try {
+                setProcessing(true);
+                const data: QRData = JSON.parse(decodedText);
+
+                // Validate QR data structure
+                if (!data.sessionId || !data.classId || !data.type || !data.token) {
+                  setScanResult({ success: false, message: 'Invalid QR code format' });
+                  return;
+                }
+
+                // Stop scanning while processing
+                await scanner.stop();
+                setIsScanning(false);
+
+                // Process the scan
+                const result = await onScan(data);
+                setScanResult(result);
+
+                if (result.success) {
+                  toast.success(result.message);
+                } else {
+                  toast.error(result.message);
+                }
+              } catch (err) {
+                setScanResult({ success: false, message: 'Invalid QR code' });
+                toast.error('Invalid QR code format');
+              } finally {
+                setProcessing(false);
+              }
+            },
+            () => {
+              // QR code not detected - do nothing
             }
-
-            // Stop scanning while processing
-            await scanner.stop();
-            setIsScanning(false);
-
-            // Process the scan
-            const result = await onScan(data);
-            setScanResult(result);
-
-            if (result.success) {
-              toast.success(result.message);
-            } else {
-              toast.error(result.message);
-            }
-          } catch (err) {
-            setScanResult({ success: false, message: 'Invalid QR code' });
-            toast.error('Invalid QR code format');
-          } finally {
-            setProcessing(false);
-          }
-        },
-        () => {
-          // QR code not detected - do nothing
+          );
+        } catch (err) {
+          console.error('Failed to start scanner with camera:', err);
+          throw err;
         }
-      );
+      };
+
+      await startScanWithCamera(initialCameraId);
     } catch (err) {
       console.error('Failed to start scanner:', err);
       setIsScanning(false);
@@ -144,6 +159,50 @@ export function QRScanner({ onScan }: QRScannerProps) {
         } else {
           toast.error('Failed to access camera. Please check permissions.');
         }
+    }
+  };
+
+  const switchCamera = async (cameraId: string) => {
+    if (!scannerRef.current) return;
+    setSwitching(true);
+    try {
+      // Stop current scanner then start with new camera
+      try {
+        const state = scannerRef.current.getState();
+        if (state === Html5QrcodeScannerState.SCANNING) {
+          await scannerRef.current.stop();
+        }
+      } catch (e) {
+        console.warn('Error stopping scanner before switching:', e);
+      }
+      // start with new camera
+      const scanner = new Html5Qrcode('qr-reader');
+      scannerRef.current = scanner;
+      setSelectedCameraId(cameraId);
+      await scanner.start(cameraId, { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, async (decodedText) => {
+        try {
+          setProcessing(true);
+          const data: QRData = JSON.parse(decodedText);
+          if (!data.sessionId || !data.classId || !data.type || !data.token) {
+            setScanResult({ success: false, message: 'Invalid QR code format' });
+            return;
+          }
+          await scanner.stop();
+          setIsScanning(false);
+          const result = await onScan(data);
+          setScanResult(result);
+          if (result.success) toast.success(result.message); else toast.error(result.message);
+        } catch (err) {
+          setScanResult({ success: false, message: 'Invalid QR code' });
+        } finally {
+          setProcessing(false);
+        }
+      }, () => {});
+    } catch (err) {
+      console.error('Error switching camera:', err);
+      toast.error('Failed to switch camera');
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -209,6 +268,25 @@ export function QRScanner({ onScan }: QRScannerProps) {
               className="aspect-square rounded-2xl overflow-hidden bg-muted"
               id="qr-reader-container"
             />
+            {cameras.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Camera:</label>
+                <select
+                  className="p-2 border rounded"
+                  value={selectedCameraId || ''}
+                  onChange={async (e) => {
+                    const id = e.target.value;
+                    if (!id) return;
+                    await switchCamera(id);
+                  }}
+                  disabled={switching}
+                >
+                  {cameras.map(c => (
+                    <option key={c.id} value={c.id}>{c.label || c.id}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <Button 
               variant="outline" 
               onClick={stopScanner} 
