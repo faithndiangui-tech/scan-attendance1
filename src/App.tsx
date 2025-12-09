@@ -9,6 +9,8 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import QRPage from "./pages/lecturer/QRPage";
+import Sessions from "./pages/lecturer/Sessions";
+import Classes from "./pages/lecturer/Classes";
 import ScanPage from "./pages/student/ScanPage";
 
 const queryClient = new QueryClient();
@@ -43,6 +45,8 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/lecturer/qr" element={<ProtectedRoute><QRPage /></ProtectedRoute>} />
+            <Route path="/lecturer/classes" element={<ProtectedRoute><Classes /></ProtectedRoute>} />
+            <Route path="/lecturer/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
             <Route path="/student/scan" element={<ProtectedRoute><ScanPage /></ProtectedRoute>} />
             <Route path="/admin/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/lecturer/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

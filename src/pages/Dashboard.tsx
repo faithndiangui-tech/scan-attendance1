@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -122,6 +123,8 @@ export default function Dashboard() {
 
   const cards = role === 'admin' ? adminCards : role === 'lecturer' ? lecturerCards : studentCards;
 
+  const navigate = useNavigate();
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -155,6 +158,15 @@ export default function Dashboard() {
                 key={card.title} 
                 className="animate-slide-up hover:shadow-lg transition-shadow cursor-pointer"
                 style={{ animationDelay: `${index * 100}ms` }}
+                onClick={() => card.link && navigate(card.link)}
+                role={card.link ? 'button' : undefined}
+                tabIndex={card.link ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (card.link && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    navigate(card.link as string);
+                  }
+                }}
               >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">

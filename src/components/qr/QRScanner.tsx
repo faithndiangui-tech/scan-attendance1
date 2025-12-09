@@ -3,6 +3,15 @@ import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Camera, CameraOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,21 +31,65 @@ export function QRScanner({ onScan }: QRScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const startScanner = async () => {
-    if (!containerRef.current) return;
+  const handleStartClick = () => {
+    setShowPermissionDialog(true);
+  };
 
+  const startScanner = async () => {
     try {
+      // Create or get the reader element and place it into the DOM before
+      // creating the Html5Qrcode instance. Html5Qrcode requires the element
+      // to exist when constructed.
+      let readerDiv = document.getElementById('qr-reader');
+      if (!readerDiv) {
+        readerDiv = document.createElement('div');
+        readerDiv.id = 'qr-reader';
+        readerDiv.style.width = '100%';
+        readerDiv.style.height = '100%';
+      }
+
+      // Ensure the container is rendered so we can move the reader into it.
+      setIsScanning(true);
+      setScanResult(null);
+      setShowPermissionDialog(false);
+
+      // Wait a tick for the container to render
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const container = document.getElementById('qr-reader-container');
+      if (container && !container.contains(readerDiv)) {
+        container.appendChild(readerDiv);
+      }
+
+      // If there is no container (unexpected), append to body to avoid
+      // Html5Qrcode throwing "element not found".
+      if (!document.getElementById('qr-reader')) {
+        document.body.appendChild(readerDiv);
+      }
+
       const scanner = new Html5Qrcode('qr-reader');
       scannerRef.current = scanner;
 
+      // Get available cameras
+      const cameras = await Html5Qrcode.getCameras();
+        if (!cameras || cameras.length === 0) {
+          toast.error('No cameras found on this device');
+          setIsScanning(false);
+          return;
+        }
+
+        const cameraId = cameras[0].id;
+
       await scanner.start(
-        { facingMode: 'environment' },
+        cameraId,
         {
           fps: 10,
           qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
         },
         async (decodedText) => {
           try {
@@ -73,12 +126,24 @@ export function QRScanner({ onScan }: QRScannerProps) {
           // QR code not detected - do nothing
         }
       );
-
-      setIsScanning(true);
-      setScanResult(null);
     } catch (err) {
       console.error('Failed to start scanner:', err);
-      toast.error('Failed to access camera. Please check permissions.');
+      setIsScanning(false);
+      
+        const errorStr = String(err);
+        const errorMessage = (err as any)?.message || errorStr;
+      
+        console.log('Error details:', { errorMessage, errorStr });
+      
+        if (errorMessage.includes('NotAllowedError') || errorMessage.includes('Permission') || errorMessage.includes('denied')) {
+          toast.error('Camera access denied. Please allow camera permissions in your browser settings.');
+        } else if (errorMessage.includes('NotFoundError') || errorMessage.includes('No camera')) {
+          toast.error('No camera found on this device.');
+        } else if (errorMessage.includes('NotReadableError') || errorMessage.includes('Could not access camera')) {
+          toast.error('Camera is in use by another application. Please close other apps using the camera.');
+        } else {
+          toast.error('Failed to access camera. Please check permissions.');
+        }
     }
   };
 
@@ -95,6 +160,16 @@ export function QRScanner({ onScan }: QRScannerProps) {
       scannerRef.current = null;
     }
     setIsScanning(false);
+
+    // Remove the reader element from the DOM to clean up
+    try {
+      const reader = document.getElementById('qr-reader');
+      if (reader && reader.parentElement) {
+        reader.parentElement.removeChild(reader);
+      }
+    } catch (e) {
+      console.warn('Failed to remove qr-reader element:', e);
+    }
   };
 
   useEffect(() => {
@@ -120,7 +195,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
         {!isScanning && !scanResult && (
           <div className="aspect-square bg-muted rounded-2xl flex flex-col items-center justify-center gap-4">
             <Camera className="w-16 h-16 text-muted-foreground" />
-            <Button onClick={startScanner} className="gap-2">
+            <Button onClick={handleStartClick} className="gap-2">
               <Camera className="w-4 h-4" />
               Start Camera
             </Button>
@@ -130,9 +205,9 @@ export function QRScanner({ onScan }: QRScannerProps) {
         {isScanning && (
           <div className="space-y-4">
             <div 
-              id="qr-reader" 
               ref={containerRef}
-              className="aspect-square rounded-2xl overflow-hidden"
+              className="aspect-square rounded-2xl overflow-hidden bg-muted"
+              id="qr-reader-container"
             />
             <Button 
               variant="outline" 
@@ -173,6 +248,23 @@ export function QRScanner({ onScan }: QRScannerProps) {
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={showPermissionDialog} onOpenChange={setShowPermissionDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Camera Permission Required</AlertDialogTitle>
+            <AlertDialogDescription>
+              This app needs access to your camera to scan QR codes for attendance. Please allow camera access when prompted by your browser.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={startScanner}>
+              Allow Camera Access
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

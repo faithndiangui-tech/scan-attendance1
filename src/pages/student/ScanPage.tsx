@@ -54,6 +54,12 @@ export default function ScanPage() {
       setRecentAttendance(data as AttendanceRecord[] || []);
     } catch (error) {
       console.error('Error fetching attendance:', error);
+      try {
+        // Print detailed info if available
+        console.error('Fetch error details:', JSON.stringify(error));
+      } catch (_) {
+        // ignore stringify errors
+      }
     } finally {
       setLoading(false);
     }
