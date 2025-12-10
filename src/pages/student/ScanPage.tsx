@@ -79,7 +79,7 @@ export default function ScanPage() {
       // Verify the session exists and token matches
       const { data: session, error: sessionError } = await supabase
         .from('sessions')
-        .select('id, status, start_qr_token, end_qr_token, class_id')
+        .select('id, status, start_qr_token, end_qr_token, class_id, start_time, end_time')
         .eq('id', data.sessionId)
         .single();
 
@@ -91,7 +91,13 @@ export default function ScanPage() {
         return { success: false, message: 'This session has already ended' };
       }
 
-      if (session.status === 'scheduled') {
+      // Allow scanning if session is in_progress OR current time is within scheduled window
+      const now = new Date();
+      const sessionStart = new Date(session.start_time);
+      const sessionEnd = new Date(session.end_time);
+      const withinWindow = now >= sessionStart && now <= sessionEnd;
+
+      if (session.status === 'scheduled' && !withinWindow) {
         return { success: false, message: 'This session has not started yet' };
       }
 

@@ -33,6 +33,7 @@ interface AttendanceRow {
   status: string;
   start_scan_time: string | null;
   end_scan_time: string | null;
+  profiles?: { full_name?: string | null; email?: string | null };
 }
 
 function generateToken(): string {
@@ -138,7 +139,7 @@ export default function Sessions() {
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .select('id, student_id, status, start_scan_time, end_scan_time')
+        .select('id, student_id, status, start_scan_time, end_scan_time, profiles (full_name, email)')
         .eq('session_id', sessionId);
       if (error) throw error;
       setAttendees(prev => ({ ...prev, [sessionId]: data || [] }));
@@ -331,8 +332,14 @@ export default function Sessions() {
                       ) : (
                         <ul className="list-disc pl-6">
                           {attendees[session.id].map(a => (
-                            <li key={a.id}>
-                              {a.student_id} — {a.status}
+                            <li key={a.id} className="mb-1">
+                              <div className="font-medium">{a.profiles?.full_name || a.student_id}</div>
+                              <div className="text-xs text-muted-foreground">{a.profiles?.email || ''}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Entered: {a.start_scan_time ? new Date(a.start_scan_time).toLocaleString() : '—'}
+                                {a.end_scan_time ? ` • Left: ${new Date(a.end_scan_time).toLocaleString()}` : ''}
+                                {a.status === 'left_early' && ' • LEFT EARLY'}
+                              </div>
                             </li>
                           ))}
                         </ul>

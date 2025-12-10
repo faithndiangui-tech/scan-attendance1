@@ -1,0 +1,27 @@
+name: Rotate QR Tokens
+
+on:
+  schedule:
+    # Runs every 5 minutes (GitHub Actions minimum granularity)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rotate start and end QR tokens via Supabase RPC
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          set -euo pipefail
+          for name in rotate_session_start_qr_tokens rotate_session_end_qr_tokens; do
+            echo "Calling $name"
+            curl -sS -X POST "${SUPABASE_URL}/rest/v1/rpc/${name}" \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE}" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              || (echo "$name failed" && exit 1)
+          done

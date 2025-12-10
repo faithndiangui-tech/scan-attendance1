@@ -52,10 +52,12 @@ export default function QRPage() {
   const [showForm, setShowForm] = useState(false);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [tokenTTL, setTokenTTL] = useState<number>(0);
 
   useEffect(() => {
     fetchData();
   }, [user]);
+
 
   const fetchData = async () => {
     if (!user) return;
@@ -122,6 +124,7 @@ export default function QRPage() {
           end_time: new Date(endTime).toISOString(),
           status: 'scheduled',
           start_qr_token: startToken,
+          token_ttl_minutes: tokenTTL,
         })
         .select(`
           id,
@@ -142,6 +145,7 @@ export default function QRPage() {
       setSelectedClass('');
       setStartTime('');
       setEndTime('');
+      setTokenTTL(0);
       toast.success('Session created successfully');
     } catch (error) {
       console.error('Error creating session:', error);
@@ -163,7 +167,7 @@ export default function QRPage() {
       const updatedSession = { ...session, status: 'in_progress' as const };
       setSessions(prev => prev.map(s => s.id === session.id ? updatedSession : s));
       setActiveSession(updatedSession);
-      toast.success('Session started - Start QR is now active');
+      toast.success('Session started - Start QR is now active. Tokens will rotate server-side if TTL is configured.');
     } catch (error) {
       console.error('Error starting session:', error);
       toast.error('Failed to start session');
@@ -298,6 +302,19 @@ export default function QRPage() {
                         type="datetime-local"
                         value={endTime}
                         onChange={(e) => setEndTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>QR TTL (minutes)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={tokenTTL.toString()}
+                        onChange={(e) => setTokenTTL(Number(e.target.value))}
+                        placeholder="0 (no rotation)"
                       />
                     </div>
                   </div>
