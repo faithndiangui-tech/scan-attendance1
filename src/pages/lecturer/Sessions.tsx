@@ -139,10 +139,33 @@ export default function Sessions() {
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .select('id, student_id, status, start_scan_time, end_scan_time, profiles (full_name, email)')
+        .select('id, student_id, status, start_scan_time, end_scan_time')
         .eq('session_id', sessionId);
       if (error) throw error;
-      setAttendees(prev => ({ ...prev, [sessionId]: data || [] }));
+
+      // Fetch profiles for the students in this session
+      if (data && data.length > 0) {
+        const studentIds = [...new Set(data.map(a => a.student_id))];
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('user_id, full_name, email')
+          .in('user_id', studentIds);
+
+        // Map profiles by user_id for easy lookup
+        const profileMap = Object.fromEntries(
+          (profilesData || []).map(p => [p.user_id, p])
+        );
+
+        // Attach profiles to attendance records
+        const attendanceWithProfiles = data.map(a => ({
+          ...a,
+          profiles: profileMap[a.student_id] || { full_name: null, email: null }
+        }));
+
+        setAttendees(prev => ({ ...prev, [sessionId]: attendanceWithProfiles }));
+      } else {
+        setAttendees(prev => ({ ...prev, [sessionId]: [] }));
+      }
     } catch (error) {
       console.error('Error loading attendees:', error);
       toast.error('Failed to load attendees');
